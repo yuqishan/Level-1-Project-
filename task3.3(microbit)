@@ -1,0 +1,54 @@
+from microbit import display, button_a, button_b, Image, sleep
+from bme688 import *
+import time
+import struct
+
+def run():
+    init_sensor()
+    init_gas_sensor()
+
+
+def readData():
+    # read all values
+    read_data_registers()
+    temp = int(calc_temperature() * 100)
+    humidity = calc_humidity()
+    pressure = calc_pressure()
+    iaqScore, iaqPercent, eCO2Value = calc_air_quality()
+    print(temp, humidity, pressure, iaqScore, eCO2Value)
+    return temp, humidity, pressure, iaqScore, eCO2Value
+
+# do this as the first reading is always off
+read_data_registers()
+
+f = open("data_compressed.csv", "w")
+# write headers
+f.write("Time,Temperature,Humidity,Pressure,IQAScore,eCO2Value\n")
+loop = True
+display.show(Image.HAPPY)
+
+# initialise variables
+count = 0
+old_temp, old_humidity, old_pressure, old_iaqScore, old_eCO2Value = 0, 0, 0, 0, 0
+
+while loop == True:
+    # read all data
+    current_temp, current_humidity, current_pressure, current_iaqScore, current_eCO2Value = readData()
+
+    # write the differences from the last values
+    f.write("{},{},{},{},{},{}\n".format(count, current_temp - old_temp, current_humidity - old_humidity, current_pressure - old_pressure, current_iaqScore - old_iaqScore, current_eCO2Value - old_eCO2Value))
+
+    timeBefore = time.ticks_ms()
+
+    # wait for 5 secs - done like this so while we're waiting, we can still click the button
+    while time.ticks_diff(time.ticks_ms(), timeBefore) < 5000:
+        if button_a.is_pressed() and button_b.is_pressed():
+            # if the buttons are clicked, stop and close file
+            display.show(Image.DIAMOND)
+            f.close()
+            loop = False
+            break
+
+    # set old values
+    old_temp, old_humidity, old_pressure, old_iaqScore, old_eCO2Value = current_temp, current_humidity, current_pressure, current_iaqScore, current_eCO2Value
+    count += 1
