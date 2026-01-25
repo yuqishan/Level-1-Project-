@@ -1,0 +1,36 @@
+import sys
+from microfs import get, get_serial
+from serial import SerialException
+
+
+def usage():
+    print("Usage: python transfer_from_microbit.py <filename>", file=sys.stderr)
+    sys.exit(1)
+
+
+def main(argv):
+    if len(argv) != 2:
+        usage()
+
+    filename = argv[1]
+
+    try:
+        # Connect to the micro:bit over USB serial
+        get_serial()
+
+        # Download the file from micro:bit to current folder on PC
+        get(filename)
+
+        print(f"Downloaded: {filename}")
+
+    except SerialException:
+        print("Serial error: micro:bit may be in use (close Mu/Thonny) or unplug/replug it.", file=sys.stderr)
+        sys.exit(1)
+
+    except OSError:
+        print(f"OS error: cannot find micro:bit or file not found on micro:bit ({filename})", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main(sys.argv)
