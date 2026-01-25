@@ -1,0 +1,50 @@
+from microfs import get, get_serial
+from serial import SerialException
+
+# get file
+def get_data_file(fileName):
+    try:
+        get(fileName)
+    except OSError:
+        print("File doesnt exist on Microbit")
+
+def start():
+    try:
+        get_serial()
+        get_data_file("data_compressed.csv")
+
+    except SerialException:
+        print("Something else is using the microbit")
+    except OSError:
+        print("Cant find microbit")
+
+start()
+
+# decompressing
+
+with open("data_compressed.csv", "r") as inFile, open("data_uncompressed.csv", "w") as outFile:
+    # Write headers
+    header = inFile.readline()
+    print(header)
+    outFile.write(header)
+
+    # read in first line (baselines)
+    lastLine = inFile.readline()
+    outFile.write(lastLine)
+    lastLine = lastLine.strip().split(",")
+
+    # change all values to integers
+    lastLine = [int(x) for x in lastLine]
+
+    for line in inFile:
+        # readline and change to ints
+        currentLine = line.strip().split(",")
+        currentLine = [int(x) for x in currentLine]
+
+        # add each index in the two arrays
+        result = [x + y for x, y in zip(currentLine, lastLine)]
+
+        # write out the new values (decompressed)
+        outFile.write("{}\n".format(','.join([str(x) for x in result])))
+
+        lastLine = result
