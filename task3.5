@@ -1,0 +1,33 @@
+import pandas as pd
+import numpy as np
+
+# load data
+data = pd.read_csv('data.csv')
+
+stats_data = {
+    'Temperature': [data['Temperature'].mean(), data['Temperature'].median(), data['Temperature'].std()],
+    'Humidity': [data['Humidity'].mean(), data['Humidity'].median(), data['Humidity'].std()],
+    'Pressure': [data['Pressure'].mean(), data['Pressure'].median(), data['Pressure'].std()],
+    'IQAScore': [data['IQAScore'].mean(), data['IQAScore'].median(), data['IQAScore'].std()],
+    'eCO2Value': [data['eCO2Value'].mean(), data['eCO2Value'].median(), data['eCO2Value'].std()]
+}
+
+# DF with statistics
+stats_df = pd.DataFrame(stats_data, index=['Mean', 'Median', 'Std Dev'])
+
+# print stats
+print("Statistics Summary:")
+print(stats_df.to_string())
+
+# correlation matrix
+# exclude non-numeric columns for the correlation matrix (time)
+numeric_columns = ['Temperature', 'Humidity', 'Pressure', 'IQAScore', 'eCO2Value']
+correlation_matrix = data[numeric_columns].corr()
+
+print("\nCorrelation Matrix:\n", correlation_matrix)
+
+# Detecting outliers using Z-score method
+from scipy import stats
+z_scores = np.abs(stats.zscore(data[numeric_columns]))
+outliers = data[(z_scores > 3).any(axis=1)]
+print("\nOutliers detected:\n", outliers)
