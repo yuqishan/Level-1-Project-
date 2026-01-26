@@ -1,0 +1,41 @@
+import serial
+
+connection = serial.Serial(
+    port='COM5',
+    baudrate=115200,
+    timeout=1
+)
+
+inbox = []
+
+def send_message():
+    user_input = input("Enter message (type INBOX to view messages): ")
+
+    if user_input.upper() == "INBOX":
+        receive_messages()
+        show_inbox()
+    else:
+        connection.write(user_input.encode())
+
+def receive_messages():
+    while connection.in_waiting > 0:
+        message = connection.readline().decode().strip()
+        inbox.append(message)
+
+def show_inbox():
+    if inbox:
+        print("----- INBOX -----")
+        for msg in inbox:
+            print(msg)
+        inbox.clear()   
+        print("---- END ----")
+    else:
+        print("Inbox is empty")
+
+def main():
+    print("Task 2.1 Chat Started")
+    while True:
+        receive_messages()
+        send_message()
+
+main()
