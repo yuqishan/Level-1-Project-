@@ -1,0 +1,42 @@
+import serial
+
+GREEN = "\033[1;32;40m" 
+GRAY = "\033[0;37;40m" 
+
+connection = serial.Serial(port='COM5', baudrate=115200, timeout=1)
+
+inbox = []
+
+def send_message():
+    user_input = input("Enter your message (type 'INBOX' to check messages): ")
+
+
+    if user_input.upper() == "INBOX":
+        receive_messages()
+        show_inbox()
+    else:
+        message = str(user_input)
+        connection.write(message.encode())
+
+def receive_messages():
+    while connection.in_waiting > 0:
+        message = connection.readline().decode().strip()
+        inbox.append(message)
+
+def show_inbox():
+    if inbox:
+        print(f"{GREEN}--- INBOX ---{GRAY}")
+        for msg in inbox:
+            print(f"{GREEN}{msg}{GRAY}")
+            print("\n")
+        inbox.clear()
+        print(f"{GREEN}--- END OF INBOX ---{GRAY}")
+    else:
+        print(f"{GREEN}Your inbox is empty.{GRAY}")
+
+def main():
+    while True:
+        receive_messages()
+        send_message()
+
+main()
