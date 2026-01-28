@@ -1,0 +1,206 @@
+import serial
+import time
+import datetime
+import csv
+import os
+
+# Constants
+PERSONAL_ID = "sc22bm2"
+DEFAULT_TARGET_ID = ""
+CSV_FILENAME = 'data_inbox.csv'
+
+# Terminal text color codes
+GREEN = "\033[1;32m"
+GRAY = "\033[0;37m"
+
+# Initialize serial connection (COM3 for Windows)
+connection = serial.Serial(port='COM3', baudrate=115200, timeout=1)
+
+# Initialize CSV file with headers if empty/missing
+def initialize_csv_file():
+    if not os.path.isfile(CSV_FILENAME) or os.stat(CSV_FILENAME).st_size == 0:
+        with open(CSV_FILENAME, 'a', newline='') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(['temp', 'humidity', 'pressure', 'iaqScore', 'eco2Value', 'time', 'micro_id'])
+
+initialize_csv_file()
+
+# Build message dict (match 4.1/4.2: senderID/receiverID)
+def build_message(content, target_id, message_type='MSG'):
+    return {'type': message_type, 'msg': content, 'senderID': PERSONAL_ID, 'receiverID': target_id}
+
+# Validate required keys in message dict
+def validate_message_format(message_dict):
+    required_keys = ['msg', 'senderID', 'receiverID']
+    for key in required_keys:
+        if key not in message_dict:
+            print("Message format incorrect!")
+            return False
+    return True
+
+# Unseen messages storage
+inbox_messages = []
+# MicroBit device list
+microbit_devices = ["micro_0", "micro_1"]
+
+# Poll MicroBits for sensor data
+def poll_microbit_devices(cycles=1):
+    for cycle in range(cycles):
+        print(f"\n{GREEN}Starting cycle {cycle + 1} of {cycles}{GRAY}\n")
+        for device_id in microbit_devices:
+            print(f"Polling {device_id} for data...")
+            send_message_to_microbit(device_id, "GetData,1")
+
+            start_time = time.time()
+            while True:
+                if check_for_messages():
+                    print(f"{GREEN}Received valid data from {device_id}.{GRAY}")
+                    break
+
+                # 4-second timeout
+                if time.time() - start_time > 4:
+                    print(f"{GRAY}No response from {device_id} within 4s. Move to next device.{GRAY}")
+                    break
+
+                time.sleep(0.1)
+
+# Send message to MicroBit via serial
+def send_message_to_microbit(target_id, message_content):
+    message = str(build_message(message_content, target_id))
+    connection.write(message.encode())
+
+# Handle user input commands
+def handle_user_input():
+    global DEFAULT_TARGET_ID
+    user_input = input("Enter your message (type 'INBOX' to check messages): ")
+
+    if user_input.upper() == "INBOX":
+        display_inbox_messages()
+        return False
+
+    elif user_input.upper() == "DATA_INBOX":
+        check_for_messages()
+        display_data_inbox()
+
+    # Change target MicroBit ID
+    elif user_input.startswith("/"):
+        new_target_id = user_input.split("/")[1].strip()
+        DEFAULT_TARGET_ID = new_target_id
+        print(DEFAULT_TARGET_ID)
+        return False
+
+    # Request sensor data and enter listening mode
+    elif user_input.upper().startswith("GETDATA"):
+        message = str(build_message(user_input,DEFAULT_TARGET_ID))
+        connection.write(message.encode())
+        enter_listening_mode()
+        return False
+
+    # Poll MicroBits in sequence (use device list, not default ID)
+    elif user_input.upper().startswith("POLL"):
+        try:
+            command_parts = user_input.split(",")
+            if len(command_parts) == 2:
+                cycles = int(command_parts[1].strip())
+                poll_microbit_devices(cycles=cycles)
+            else:
+                print(f"{GRAY}Invalid format. Use 'POLL,n' (n=cycle count){GRAY}")
+        except ValueError:
+            print(f"{GRAY}Invalid number. Use 'POLL,n' (n=cycle count){GRAY}")
+        return False
+
+    # Send normal message
+    else:
+        message = str(build_message(user_input,DEFAULT_TARGET_ID))
+        connection.write(message.encode())
+        return True
+
+# Check serial port for incoming messages
+def check_for_messages():
+    while connection.in_waiting > 0:
+        raw_message = connection.readline().decode().strip()
+
+        try:
+            print(raw_message)
+            # Convert single quotes to double quotes for valid JSON parsing
+            message_dict = eval(raw_message.replace("'", '"'))
+        except (SyntaxError, NameError):
+            print("Invalid message format received.")
+            continue
+
+        if validate_message_format(message_dict):
+            if message_dict['receiverID'] == PERSONAL_ID:
+                # Process DATA type messages (sensor data)
+                if 'type' in message_dict and message_dict['type'] == "DATA":
+                    data_message = eval(message_dict['msg']) if not isinstance(message_dict['msg'], list) else message_dict['msg']
+                    data_message.append(datetime.datetime.now())
+                    data_message.append(message_dict['senderID'])
+
+                    with open(CSV_FILENAME, 'a', newline='') as csvfile:
+                        csv_writer = csv.writer(csvfile)
+                        csv_writer.writerow(data_message)
+                    return True
+
+                # Process normal messages
+                else:
+                    inbox_messages.append(message_dict)
+                    print(f"{GREEN}New message from {message_dict['senderID']}: {message_dict['msg']}{GRAY}")
+                    return True
+    return False
+
+# Continuous listening mode (Ctrl+C to exit)
+def enter_listening_mode():
+    print(f"{GREEN}Entering listening mode. Press Ctrl-C to stop.{GRAY}")
+    try:
+        while True:
+            check_for_messages()
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print(f"{GRAY}\nListening mode stopped. Back to command mode.{GRAY}")
+
+# Display all unseen messages in inbox
+def display_inbox_messages():
+    if inbox_messages:
+        print(f"{GREEN}--- INBOX ---{GRAY}")
+        for msg in inbox_messages:
+            print(f"{GREEN}{msg['msg']}{GRAY}\n")
+        print(f"{GREEN}--- END OF INBOX ---{GRAY}")
+    else:
+        print(f"{GREEN}Inbox is empty.{GRAY}")
+
+# Display sensor data from CSV file
+def display_data_inbox():
+    try:
+        with open(CSV_FILENAME, 'r') as csvfile:
+            csv_reader = csv.reader(csvfile)
+            print(f"{GREEN}--- DATA INBOX ---{GRAY}")
+            for row in csv_reader:
+                print(f"{GREEN}{row}{GRAY}\n")
+            print(f"{GREEN}--- END OF DATA INBOX ---{GRAY}")
+    except FileNotFoundError:
+        print(f"{GREEN}Data inbox is empty.{GRAY}")
+
+# Main program loop
+def main_loop():
+    while True:
+        message_sent = handle_user_input()
+
+        if message_sent:
+            print("Waiting for response...")
+            start_time = time.time()
+            response_received = False
+
+            while True:
+                if check_for_messages():
+                    response_received = True
+                    break
+
+                # 6-second response timeout
+                if time.time() - start_time > 6:
+                    print(f"{GRAY}No response within 6s. Back to user control.{GRAY}")
+                    break
+
+                time.sleep(0.1)
+
+# Start main loop
+main_loop()
