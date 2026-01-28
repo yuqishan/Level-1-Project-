@@ -1,0 +1,88 @@
+# imports
+from microbit import *
+import radio
+from bme688 import *
+
+init_sensor()
+init_gas_sensor()
+read_data_registers()
+
+## function to read dat from kitronik sensors
+def read_sensor_data():
+    data = []
+    read_data_registers()
+    temp = calc_temperature()
+    humidity = calc_humidity()
+    pressure = calc_pressure()
+    iaqScore, iaqPercent, eCO2Value = calc_air_quality()
+    data.append([temp,humidity,pressure,iaqScore,eCO2Value])
+    #display.scroll(str(data))
+    return data[0]
+
+#configures radio
+radio.on()
+radio.config(channel = 12, group = 1)
+
+# device and target IDs
+myID = "micro_1"
+targetID = ""
+
+# function to create message
+def createMessage(value, type='MSG'):
+    message = "{'type':'" + type + "', 'msg': '" + value + "', 'senderID': '" + myID + "', 'receiverID': '" + targetID + "'}"
+    display.scroll("sen")
+    return message
+
+#function to create message with data
+def createDataMessage():
+    data = read_sensor_data()
+    return createMessage(value=str(data), type='DATA')
+
+#function to parse message
+def parseMessage(radioMessage):
+    try:
+        if radioMessage.startswith("{") and radioMessage.endswith("}"):
+            messageDict = {}
+            pairs = radioMessage[1:-1].split(", ")
+            for pair in pairs:
+                key, value = pair.split(": ")
+                messageDict[key.strip("'")] = value.strip("'")
+            return messageDict
+        else:
+            return None
+    except:
+        return None
+
+#main loop
+while True:
+    radioMessage = radio.receive()
+
+    if radioMessage:
+        messageDict = parseMessage(radioMessage)
+
+        if messageDict and myID == messageDict['receiverID']:
+            targetID= messageDict['senderID']
+
+            if messageDict['msg'] == "Connect":
+                radio.send(createMessage("Connected, Here are my functions! {Sensors, GetData}"))
+
+            elif messageDict['msg'] == "Sensors":
+                radio.send(createMessage("None"))
+
+            elif messageDict['msg'].startswith("GetData"):
+                try:
+                    numreadingsStr = messageDict['msg'].split(',')
+                    numReadings = int(numReadingsStr)
+
+                    for i in range(numReadings):
+                        isLast = (i == numReadings - 1)
+                        radio.send(createDataMessage())
+                        sleep(1500)
+
+                except ValueError:
+                    radio.send(createMessage(f"Invalid request format. Use GetData,{numReadings}"))
+
+            else:
+                radio.send(createMessage("WrongUseOfMicro"))
+
+    sleep(500)
