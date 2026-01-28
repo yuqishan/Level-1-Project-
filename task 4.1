@@ -1,0 +1,53 @@
+# imports
+from microbit import *
+import radio 
+
+#turns on and configures radio
+radio.on()
+radio.config(channel = 12, group = 1)
+
+## device and target IDs
+myID = "micro_1"
+targetID = ""
+
+#function to create a message  
+def createMessage(value):
+    message = "{'msg': '" + value + "', 'senderID': '" + myID + "', 'recieverID': '" + targetID + "'}"
+    return message
+
+#function to parse incoming message
+def parseMessage(radioMessage):
+    try:
+        if radioMessage.startswith("{") and radioMessage.endswith("}"):
+            messageDict = {}
+            pairs = radioMessage[1:-1].split(", ")
+            for pair in pairs:
+                key, value = pair.split(", ")
+                messageDict[key.strip("'")] = value.strip("'")
+            return messageDict
+        else:
+            return None
+    except:
+        return None
+
+# main loop
+while True:
+    radioMessage = radio.receive()
+
+    if radioMessage:
+        messageDict = parseMessage(radioMessage)
+
+        if messageDict != None:
+             display.scroll(messageDict['msg'])
+
+        if myID == messageDict['receiverID']:
+            targetID = messageDict['senderID']
+
+            if messageDict['msg'] == "Connect":
+                radio.send(createMessage("Conected, Here are my functions! {Sensors}"))
+            if messageDict['msg'] == "Sensors":
+                radio.send(createMessage(" None" ))
+            else:
+                radio.send(createMessage("WrongUseOfMicro"))
+
+    sleep(500)
