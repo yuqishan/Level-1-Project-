@@ -16,7 +16,7 @@ def read_sensor_data():
     pressure = calc_pressure()
     iaqScore, iaqPercent, eCO2Value = calc_air_quality()
     data.append([temp,humidity,pressure,iaqScore,eCO2Value])
-    #display.scroll(str(data))
+    display.scroll(str(data))
     return data[0]
 
 #configures radio
